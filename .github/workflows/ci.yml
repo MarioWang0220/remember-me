@@ -1,0 +1,243 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  lint_typecheck:
+    name: lint_typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_CMD=pnpm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=pnpm install --no-frozen-lockfile" >> "$GITHUB_ENV"
+            echo "USE_PNPM=true" >> "$GITHUB_ENV"
+          else
+            echo "PKG_CMD=npm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=npm install" >> "$GITHUB_ENV"
+            echo "USE_PNPM=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pnpm (if needed)
+        if: env.USE_PNPM == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: eval "$INSTALL_CMD"
+
+      - name: Validate required scripts
+        run: |
+          node -e "const fs=require('fs');const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));const scripts=pkg.scripts||{};const req=['lint','typecheck','test:unit','test:e2e','test:playwright:preview'];const miss=req.filter(k=>!scripts[k]);if(miss.length){console.error('Missing scripts: '+miss.join(', '));process.exit(1);}"
+
+      - name: Run lint
+        shell: bash
+        run: $PKG_CMD run lint
+
+      - name: Run typecheck
+        shell: bash
+        run: $PKG_CMD run typecheck
+
+  unit_tests:
+    name: unit_tests
+    runs-on: ubuntu-latest
+    needs: [lint_typecheck]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_CMD=pnpm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=pnpm install --no-frozen-lockfile" >> "$GITHUB_ENV"
+            echo "USE_PNPM=true" >> "$GITHUB_ENV"
+          else
+            echo "PKG_CMD=npm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=npm install" >> "$GITHUB_ENV"
+            echo "USE_PNPM=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pnpm (if needed)
+        if: env.USE_PNPM == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: eval "$INSTALL_CMD"
+
+      - name: Run unit tests
+        shell: bash
+        run: $PKG_CMD run test:unit
+
+  e2e_local:
+    name: e2e_local
+    runs-on: ubuntu-latest
+    needs: [lint_typecheck, unit_tests]
+    if: ${{ vars.CI_TEST_PHASE == 'phase2' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_CMD=pnpm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=pnpm install --no-frozen-lockfile" >> "$GITHUB_ENV"
+            echo "USE_PNPM=true" >> "$GITHUB_ENV"
+          else
+            echo "PKG_CMD=npm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=npm install" >> "$GITHUB_ENV"
+            echo "USE_PNPM=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pnpm (if needed)
+        if: env.USE_PNPM == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: eval "$INSTALL_CMD"
+
+      - name: Build app
+        shell: bash
+        run: $PKG_CMD run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright local E2E
+        shell: bash
+        run: |
+          PLAYWRIGHT_USE_WEBSERVER=1 \
+          PLAYWRIGHT_WEBSERVER_COMMAND="$PKG_CMD run start:e2e" \
+          BASE_URL="http://127.0.0.1:3000" \
+          $PKG_CMD run test:e2e
+
+      - name: Upload Playwright report (local)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-local
+          path: playwright-report
+          if-no-files-found: ignore
+
+  playwright_preview:
+    name: playwright_preview
+    runs-on: ubuntu-latest
+    needs: [lint_typecheck, unit_tests]
+    if: ${{ vars.CI_TEST_PHASE == 'phase2' }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_CMD=pnpm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=pnpm install --no-frozen-lockfile" >> "$GITHUB_ENV"
+            echo "USE_PNPM=true" >> "$GITHUB_ENV"
+          else
+            echo "PKG_CMD=npm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=npm install" >> "$GITHUB_ENV"
+            echo "USE_PNPM=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pnpm (if needed)
+        if: env.USE_PNPM == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: eval "$INSTALL_CMD"
+
+      - name: Validate Vercel secrets (fail-closed)
+        shell: bash
+        run: |
+          missing=()
+          [ -z "${VERCEL_TOKEN:-}" ] && missing+=("VERCEL_TOKEN")
+          [ -z "${VERCEL_ORG_ID:-}" ] && missing+=("VERCEL_ORG_ID")
+          [ -z "${VERCEL_PROJECT_ID:-}" ] && missing+=("VERCEL_PROJECT_ID")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Deploy Vercel preview
+        shell: bash
+        run: |
+          npm install -g vercel@latest
+          vercel pull --yes --environment=preview --token "$VERCEL_TOKEN"
+          vercel build --token "$VERCEL_TOKEN"
+          preview_url="$(vercel deploy --prebuilt --token "$VERCEL_TOKEN" --yes | tail -n1)"
+          if ! echo "$preview_url" | grep -Eq '^https?://'; then
+            echo "::error::Failed to resolve preview URL from vercel deploy output"
+            exit 1
+          fi
+          echo "BASE_URL=$preview_url" >> "$GITHUB_ENV"
+          echo "Preview URL: $preview_url"
+
+      - name: Run Playwright preview tests
+        shell: bash
+        run: BASE_URL="$BASE_URL" $PKG_CMD run test:playwright:preview
+
+      - name: Upload Playwright report (preview)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-preview
+          path: playwright-report
+          if-no-files-found: ignore

@@ -1,0 +1,72 @@
+name: Nightly E2E
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  nightly_e2e_observe:
+    name: nightly_e2e_observe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        shell: bash
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            echo "PKG_CMD=pnpm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=pnpm install --no-frozen-lockfile" >> "$GITHUB_ENV"
+            echo "USE_PNPM=true" >> "$GITHUB_ENV"
+          else
+            echo "PKG_CMD=npm" >> "$GITHUB_ENV"
+            echo "INSTALL_CMD=npm install" >> "$GITHUB_ENV"
+            echo "USE_PNPM=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Enable pnpm (if needed)
+        if: env.USE_PNPM == 'true'
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
+      - name: Install dependencies
+        shell: bash
+        run: eval "$INSTALL_CMD"
+
+      - name: Build app
+        shell: bash
+        run: $PKG_CMD run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run nightly local E2E (phase1 tolerant)
+        continue-on-error: ${{ vars.CI_TEST_PHASE != 'phase2' }}
+        shell: bash
+        run: |
+          PLAYWRIGHT_USE_WEBSERVER=1 \
+          PLAYWRIGHT_WEBSERVER_COMMAND="$PKG_CMD run start:e2e" \
+          BASE_URL="http://127.0.0.1:3000" \
+          $PKG_CMD run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
