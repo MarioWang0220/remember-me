@@ -1,8 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Story, buildTimelineStoryIndex, formatStoryYear } from "../lib/timeline";
+import {
+  Story,
+  buildTimelineStoryIndex,
+  formatStoryYear,
+  resolveSelectedYear
+} from "../lib/timeline";
 
 type TimelineClientProps = {
   stories: Story[];
@@ -15,7 +20,15 @@ export default function TimelineClient({ stories }: TimelineClientProps) {
     [timelineStoryIndex]
   );
   const [selectedYear, setSelectedYear] = useState<number | undefined>(timelineYears[0]);
-  const activeYear = selectedYear ?? timelineYears[0];
+  const activeYear = resolveSelectedYear(selectedYear, timelineYears);
+
+  useEffect(() => {
+    const nextSelectedYear = resolveSelectedYear(selectedYear, timelineYears);
+    if (nextSelectedYear !== selectedYear) {
+      setSelectedYear(nextSelectedYear);
+    }
+  }, [selectedYear, timelineYears]);
+
   const storiesForSelectedYear =
     activeYear === undefined ? [] : timelineStoryIndex[activeYear] ?? [];
 

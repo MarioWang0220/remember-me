@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_STORY_YEAR_SPAN,
   SAMPLE_STORIES,
   buildTimelineIndex,
   buildTimelineStoryIndex,
   formatStoryYear,
   getStoriesForYear,
   getStoryYears,
-  getTimelineYears
+  getTimelineYears,
+  resolveSelectedYear
 } from "../../lib/timeline";
 
 describe("timeline helpers", () => {
@@ -35,6 +37,10 @@ describe("timeline helpers", () => {
     expect(years[100]).toBe(2000);
   });
 
+  it("returns empty years for oversized range to avoid expansion blowup", () => {
+    expect(getStoryYears({ startYear: 1900, endYear: 1900 + MAX_STORY_YEAR_SPAN })).toEqual([]);
+  });
+
   it("builds sorted timeline years from mixed stories", () => {
     expect(getTimelineYears(SAMPLE_STORIES)).toEqual([1978, 1984, 1985, 1986, 1995]);
   });
@@ -53,6 +59,22 @@ describe("timeline helpers", () => {
     expect(getStoriesForYear(SAMPLE_STORIES, Number.NaN)).toEqual([]);
   });
 
+  it("filters out stories with oversized ranges from year lookup", () => {
+    const stories = [
+      ...SAMPLE_STORIES,
+      {
+        id: "oversized-range",
+        title: "超大跨度",
+        summary: "用于边界测试",
+        details: "不应进入时间线索引",
+        yearBinding: { startYear: 1000, endYear: 1000 + MAX_STORY_YEAR_SPAN }
+      }
+    ];
+
+    expect(getStoriesForYear(stories, 1100)).toHaveLength(0);
+    expect(getTimelineYears(stories)).toEqual([1978, 1984, 1985, 1986, 1995]);
+  });
+
   it("keeps timeline index and story mapping consistent", () => {
     const index = buildTimelineIndex(SAMPLE_STORIES);
     expect(index[1978]).toEqual(["story-1978-first-job"]);
@@ -67,6 +89,13 @@ describe("timeline helpers", () => {
     expect(index[1978]?.map((story) => story.id)).toEqual(["story-1978-first-job"]);
     expect(index[1985]?.map((story) => story.id)).toEqual(["story-1984-night-school"]);
     expect(index[1995]?.map((story) => story.id)).toEqual(["story-1995-shop"]);
+  });
+
+  it("resolves selected year with fallback when timeline years change", () => {
+    expect(resolveSelectedYear(undefined, [1978, 1984])).toBe(1978);
+    expect(resolveSelectedYear(1984, [1978, 1984])).toBe(1984);
+    expect(resolveSelectedYear(1995, [1978, 1984])).toBe(1978);
+    expect(resolveSelectedYear(1995, [])).toBeUndefined();
   });
 
   it("formats year binding for detail view", () => {

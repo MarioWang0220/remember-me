@@ -3,6 +3,7 @@ node_modules
 playwright-report
 test-results
 tests-artifacts-*.png
+tsconfig.tsbuildinfo
 coverage
 .env
 .env.local

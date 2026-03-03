@@ -42,8 +42,10 @@ export const SAMPLE_STORIES: Story[] = [
   }
 ];
 
+export const MAX_STORY_YEAR_SPAN = 200;
+
 function isValidYear(year: number): boolean {
-  return Number.isInteger(year) && Number.isFinite(year);
+  return Number.isInteger(year);
 }
 
 function getNormalizedRange(binding: { startYear: number; endYear: number }): {
@@ -58,6 +60,10 @@ function getNormalizedRange(binding: { startYear: number; endYear: number }): {
   }
 
   return { start, end };
+}
+
+function isRangeWithinSupportedSpan(start: number, end: number): boolean {
+  return end - start + 1 <= MAX_STORY_YEAR_SPAN;
 }
 
 export function includesYear(binding: StoryYearBinding, year: number): boolean {
@@ -75,6 +81,10 @@ export function includesYear(binding: StoryYearBinding, year: number): boolean {
   }
 
   const { start, end } = normalizedRange;
+  if (!isRangeWithinSupportedSpan(start, end)) {
+    return false;
+  }
+
   return year >= start && year <= end;
 }
 
@@ -89,6 +99,10 @@ export function getStoryYears(binding: StoryYearBinding): number[] {
   }
 
   const { start, end } = normalizedRange;
+  if (!isRangeWithinSupportedSpan(start, end)) {
+    return [];
+  }
+
   const years: number[] = [];
 
   for (let year = start; year <= end; year += 1) {
@@ -109,6 +123,9 @@ export function formatStoryYear(binding: StoryYearBinding): string {
   }
 
   const { start, end } = normalizedRange;
+  if (!isRangeWithinSupportedSpan(start, end)) {
+    return "未知年份";
+  }
 
   if (start === end) {
     return `${start}`;
@@ -157,4 +174,19 @@ export function buildTimelineStoryIndex(stories: Story[]): Record<number, Story[
   }
 
   return index;
+}
+
+export function resolveSelectedYear(
+  selectedYear: number | undefined,
+  timelineYears: number[]
+): number | undefined {
+  if (timelineYears.length === 0) {
+    return undefined;
+  }
+
+  if (selectedYear === undefined) {
+    return timelineYears[0];
+  }
+
+  return timelineYears.includes(selectedYear) ? selectedYear : timelineYears[0];
 }
