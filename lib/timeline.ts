@@ -1,0 +1,101 @@
+export type StoryYearBinding =
+  | {
+      year: number;
+    }
+  | {
+      startYear: number;
+      endYear: number;
+    };
+
+export type Story = {
+  id: string;
+  title: string;
+  summary: string;
+  details: string;
+  yearBinding: StoryYearBinding;
+};
+
+export const SAMPLE_STORIES: Story[] = [
+  {
+    id: "story-1978-first-job",
+    title: "第一次进城工作",
+    summary: "1978 年离开家乡进入纺织厂，从学徒做起。",
+    details:
+      "那年秋天我坐了 9 个小时的绿皮火车进城，在纺织厂轮班三个月后终于转正，这是我人生第一次真正独立。",
+    yearBinding: { year: 1978 }
+  },
+  {
+    id: "story-1984-night-school",
+    title: "在乡镇办夜校",
+    summary: "1984 到 1986 年连续三年组织夜校扫盲班。",
+    details:
+      "白天种田，晚上借祠堂教识字，三年里一共办了 11 期夜校，后来很多人都能自己写信了。",
+    yearBinding: { startYear: 1984, endYear: 1986 }
+  },
+  {
+    id: "story-1995-shop",
+    title: "开第一家小店",
+    summary: "1995 年在集市旁开了杂货小店。",
+    details:
+      "为了照顾家里老人，我把工厂工作改成了开店。虽然利润不高，但一家人终于能一起吃晚饭。",
+    yearBinding: { year: 1995 }
+  }
+];
+
+export function getStoryYears(binding: StoryYearBinding): number[] {
+  if ("year" in binding) {
+    return [binding.year];
+  }
+
+  const start = Math.min(binding.startYear, binding.endYear);
+  const end = Math.max(binding.startYear, binding.endYear);
+  const years: number[] = [];
+
+  for (let year = start; year <= end; year += 1) {
+    years.push(year);
+  }
+
+  return years;
+}
+
+export function formatStoryYear(binding: StoryYearBinding): string {
+  if ("year" in binding) {
+    return `${binding.year}`;
+  }
+
+  const start = Math.min(binding.startYear, binding.endYear);
+  const end = Math.max(binding.startYear, binding.endYear);
+
+  return `${start}-${end}`;
+}
+
+export function getTimelineYears(stories: Story[]): number[] {
+  const years = new Set<number>();
+
+  for (const story of stories) {
+    for (const year of getStoryYears(story.yearBinding)) {
+      years.add(year);
+    }
+  }
+
+  return [...years].sort((a, b) => a - b);
+}
+
+export function getStoriesForYear(stories: Story[], year: number): Story[] {
+  return stories.filter((story) => getStoryYears(story.yearBinding).includes(year));
+}
+
+export function buildTimelineIndex(stories: Story[]): Record<number, string[]> {
+  const index: Record<number, string[]> = {};
+
+  for (const story of stories) {
+    for (const year of getStoryYears(story.yearBinding)) {
+      if (!index[year]) {
+        index[year] = [];
+      }
+      index[year].push(story.id);
+    }
+  }
+
+  return index;
+}
