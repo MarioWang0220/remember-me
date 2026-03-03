@@ -42,31 +42,53 @@ export const SAMPLE_STORIES: Story[] = [
   }
 ];
 
+function isValidYear(year: number): boolean {
+  return Number.isInteger(year) && Number.isFinite(year);
+}
+
 function getNormalizedRange(binding: { startYear: number; endYear: number }): {
   start: number;
   end: number;
-} {
-  return {
-    start: Math.min(binding.startYear, binding.endYear),
-    end: Math.max(binding.startYear, binding.endYear)
-  };
+} | null {
+  const start = Math.min(binding.startYear, binding.endYear);
+  const end = Math.max(binding.startYear, binding.endYear);
+
+  if (!isValidYear(start) || !isValidYear(end)) {
+    return null;
+  }
+
+  return { start, end };
 }
 
 export function includesYear(binding: StoryYearBinding, year: number): boolean {
-  if ("year" in binding) {
-    return binding.year === year;
+  if (!isValidYear(year)) {
+    return false;
   }
 
-  const { start, end } = getNormalizedRange(binding);
+  if ("year" in binding) {
+    return isValidYear(binding.year) && binding.year === year;
+  }
+
+  const normalizedRange = getNormalizedRange(binding);
+  if (!normalizedRange) {
+    return false;
+  }
+
+  const { start, end } = normalizedRange;
   return year >= start && year <= end;
 }
 
 export function getStoryYears(binding: StoryYearBinding): number[] {
   if ("year" in binding) {
-    return [binding.year];
+    return isValidYear(binding.year) ? [binding.year] : [];
   }
 
-  const { start, end } = getNormalizedRange(binding);
+  const normalizedRange = getNormalizedRange(binding);
+  if (!normalizedRange) {
+    return [];
+  }
+
+  const { start, end } = normalizedRange;
   const years: number[] = [];
 
   for (let year = start; year <= end; year += 1) {
@@ -78,10 +100,15 @@ export function getStoryYears(binding: StoryYearBinding): number[] {
 
 export function formatStoryYear(binding: StoryYearBinding): string {
   if ("year" in binding) {
-    return `${binding.year}`;
+    return isValidYear(binding.year) ? `${binding.year}` : "未知年份";
   }
 
-  const { start, end } = getNormalizedRange(binding);
+  const normalizedRange = getNormalizedRange(binding);
+  if (!normalizedRange) {
+    return "未知年份";
+  }
+
+  const { start, end } = normalizedRange;
 
   if (start === end) {
     return `${start}`;
