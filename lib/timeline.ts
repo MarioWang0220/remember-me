@@ -42,13 +42,31 @@ export const SAMPLE_STORIES: Story[] = [
   }
 ];
 
+function getNormalizedRange(binding: { startYear: number; endYear: number }): {
+  start: number;
+  end: number;
+} {
+  return {
+    start: Math.min(binding.startYear, binding.endYear),
+    end: Math.max(binding.startYear, binding.endYear)
+  };
+}
+
+export function includesYear(binding: StoryYearBinding, year: number): boolean {
+  if ("year" in binding) {
+    return binding.year === year;
+  }
+
+  const { start, end } = getNormalizedRange(binding);
+  return year >= start && year <= end;
+}
+
 export function getStoryYears(binding: StoryYearBinding): number[] {
   if ("year" in binding) {
     return [binding.year];
   }
 
-  const start = Math.min(binding.startYear, binding.endYear);
-  const end = Math.max(binding.startYear, binding.endYear);
+  const { start, end } = getNormalizedRange(binding);
   const years: number[] = [];
 
   for (let year = start; year <= end; year += 1) {
@@ -63,8 +81,11 @@ export function formatStoryYear(binding: StoryYearBinding): string {
     return `${binding.year}`;
   }
 
-  const start = Math.min(binding.startYear, binding.endYear);
-  const end = Math.max(binding.startYear, binding.endYear);
+  const { start, end } = getNormalizedRange(binding);
+
+  if (start === end) {
+    return `${start}`;
+  }
 
   return `${start}-${end}`;
 }
@@ -82,18 +103,29 @@ export function getTimelineYears(stories: Story[]): number[] {
 }
 
 export function getStoriesForYear(stories: Story[], year: number): Story[] {
-  return stories.filter((story) => getStoryYears(story.yearBinding).includes(year));
+  return stories.filter((story) => includesYear(story.yearBinding, year));
 }
 
 export function buildTimelineIndex(stories: Story[]): Record<number, string[]> {
+  const timelineStoryIndex = buildTimelineStoryIndex(stories);
   const index: Record<number, string[]> = {};
+
+  for (const [year, storiesForYear] of Object.entries(timelineStoryIndex)) {
+    index[Number(year)] = storiesForYear.map((story) => story.id);
+  }
+
+  return index;
+}
+
+export function buildTimelineStoryIndex(stories: Story[]): Record<number, Story[]> {
+  const index: Record<number, Story[]> = {};
 
   for (const story of stories) {
     for (const year of getStoryYears(story.yearBinding)) {
       if (!index[year]) {
         index[year] = [];
       }
-      index[year].push(story.id);
+      index[year].push(story);
     }
   }
 

@@ -4,20 +4,18 @@ import { useMemo, useState } from "react";
 
 import {
   SAMPLE_STORIES,
-  buildTimelineIndex,
+  buildTimelineStoryIndex,
   formatStoryYear,
-  getStoriesForYear,
-  getTimelineYears
 } from "../lib/timeline";
 
 export default function HomePage() {
-  const timelineYears = useMemo(() => getTimelineYears(SAMPLE_STORIES), []);
-  const timelineIndex = useMemo(() => buildTimelineIndex(SAMPLE_STORIES), []);
-  const [selectedYear, setSelectedYear] = useState<number>(timelineYears[0] ?? 0);
-  const storiesForSelectedYear = useMemo(
-    () => getStoriesForYear(SAMPLE_STORIES, selectedYear),
-    [selectedYear]
+  const timelineStoryIndex = useMemo(() => buildTimelineStoryIndex(SAMPLE_STORIES), []);
+  const timelineYears = useMemo(
+    () => Object.keys(timelineStoryIndex).map(Number).sort((a, b) => a - b),
+    [timelineStoryIndex]
   );
+  const [selectedYear, setSelectedYear] = useState<number>(timelineYears[0] ?? 0);
+  const storiesForSelectedYear = timelineStoryIndex[selectedYear] ?? [];
 
   return (
     <main
@@ -59,14 +57,14 @@ export default function HomePage() {
             }}
           >
             {timelineYears.map((year) => {
-              const count = timelineIndex[year]?.length ?? 0;
+              const count = timelineStoryIndex[year]?.length ?? 0;
               const isSelected = year === selectedYear;
               return (
                 <li key={year}>
                   <button
                     type="button"
                     onClick={() => setSelectedYear(year)}
-                    aria-pressed={isSelected}
+                    aria-current={isSelected ? "true" : undefined}
                     style={{
                       width: "100%",
                       textAlign: "left",

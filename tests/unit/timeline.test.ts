@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   SAMPLE_STORIES,
   buildTimelineIndex,
+  buildTimelineStoryIndex,
   formatStoryYear,
   getStoriesForYear,
   getStoryYears,
@@ -41,8 +42,16 @@ describe("timeline helpers", () => {
     expect(index[1995]).toEqual(["story-1995-shop"]);
   });
 
+  it("builds story index grouped by year for O(1) year lookups", () => {
+    const index = buildTimelineStoryIndex(SAMPLE_STORIES);
+    expect(index[1978]?.map((story) => story.id)).toEqual(["story-1978-first-job"]);
+    expect(index[1985]?.map((story) => story.id)).toEqual(["story-1984-night-school"]);
+    expect(index[1995]?.map((story) => story.id)).toEqual(["story-1995-shop"]);
+  });
+
   it("formats year binding for detail view", () => {
     expect(formatStoryYear({ year: 1995 })).toBe("1995");
     expect(formatStoryYear({ startYear: 1984, endYear: 1986 })).toBe("1984-1986");
+    expect(formatStoryYear({ startYear: 1984, endYear: 1984 })).toBe("1984");
   });
 });
