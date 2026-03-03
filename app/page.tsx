@@ -1,8 +1,15 @@
+import VoiceSession from "./components/voice-session";
+
 export default function HomePage() {
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      <h1>New Project Template</h1>
-      <p>This project is initialized with CI gates for lint, typecheck, unit, and Playwright tests.</p>
+    <main
+      style={{
+        minHeight: "100vh",
+        padding: 24,
+        background: "linear-gradient(180deg, #f4f9f8 0%, #f8f5ef 100%)"
+      }}
+    >
+      <VoiceSession />
     </main>
   );
 }
