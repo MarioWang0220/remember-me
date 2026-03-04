@@ -5,6 +5,10 @@ import { storyStore } from "../../../../lib/story-store";
 
 export const dynamic = "force-dynamic";
 
+interface StoryRouteContext {
+  params: Promise<{ storyId?: string }> | { storyId?: string };
+}
+
 function getStoryId(params: { storyId?: string }): string | null {
   if (!params.storyId) {
     return null;
@@ -14,13 +18,18 @@ function getStoryId(params: { storyId?: string }): string | null {
   return storyId.length > 0 ? storyId : null;
 }
 
-export async function GET(request: NextRequest, context: { params: { storyId?: string } }) {
+async function resolveStoryId(context: StoryRouteContext): Promise<string | null> {
+  const params = await Promise.resolve(context.params);
+  return getStoryId(params);
+}
+
+export async function GET(request: NextRequest, context: StoryRouteContext) {
   const userId = getRequestUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const storyId = getStoryId(context.params);
+  const storyId = await resolveStoryId(context);
   if (!storyId) {
     return NextResponse.json({ error: "storyId is required." }, { status: 400 });
   }
@@ -33,13 +42,13 @@ export async function GET(request: NextRequest, context: { params: { storyId?: s
   return NextResponse.json({ story }, { status: 200 });
 }
 
-export async function DELETE(request: NextRequest, context: { params: { storyId?: string } }) {
+export async function DELETE(request: NextRequest, context: StoryRouteContext) {
   const userId = getRequestUserId(request);
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const storyId = getStoryId(context.params);
+  const storyId = await resolveStoryId(context);
   if (!storyId) {
     return NextResponse.json({ error: "storyId is required." }, { status: 400 });
   }

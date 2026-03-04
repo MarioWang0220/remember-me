@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { createHmac } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DELETE as deleteStory, GET as getStory } from "../../app/api/stories/[storyId]/route";
@@ -10,12 +11,24 @@ interface RequestOptions {
   method: string;
   userId?: string;
   body?: unknown;
+  tamperSignature?: boolean;
+}
+
+const TEST_AUTH_SECRET = "unit-test-auth-secret";
+
+function buildSignature(userId: string, timestamp: string, secret: string): string {
+  return createHmac("sha256", secret).update(`${userId}.${timestamp}`).digest("hex");
 }
 
 function buildRequest(url: string, options: RequestOptions): NextRequest {
   const headers = new Headers();
   if (options.userId) {
+    const timestamp = Date.now().toString();
+    const signature = buildSignature(options.userId, timestamp, TEST_AUTH_SECRET);
+
     headers.set("x-user-id", options.userId);
+    headers.set("x-auth-timestamp", timestamp);
+    headers.set("x-auth-signature", options.tamperSignature ? `${signature}ff` : signature);
   }
   if (typeof options.body !== "undefined") {
     headers.set("content-type", "application/json");
@@ -30,11 +43,19 @@ function buildRequest(url: string, options: RequestOptions): NextRequest {
 
 describe("story api contracts", () => {
   beforeEach(() => {
+    process.env.AUTH_SHARED_SECRET = TEST_AUTH_SECRET;
     resetStoryStoreForTest();
   });
 
   it("requires user identity for listing stories", async () => {
     const response = await getStories(buildRequest("http://localhost/api/stories", { method: "GET" }));
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects requests with invalid auth signature", async () => {
+    const response = await getStories(
+      buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1", tamperSignature: true })
+    );
     expect(response.status).toBe(401);
   });
 
@@ -57,13 +78,13 @@ describe("story api contracts", () => {
 
     const ownerView = await getStory(
       buildRequest(`http://localhost/api/stories/${createBody.story.storyId}`, { method: "GET", userId: "owner-1" }),
-      { params: { storyId: createBody.story.storyId } }
+      { params: Promise.resolve({ storyId: createBody.story.storyId }) }
     );
     expect(ownerView.status).toBe(200);
 
     const otherView = await getStory(
       buildRequest(`http://localhost/api/stories/${createBody.story.storyId}`, { method: "GET", userId: "owner-2" }),
-      { params: { storyId: createBody.story.storyId } }
+      { params: Promise.resolve({ storyId: createBody.story.storyId }) }
     );
     expect(otherView.status).toBe(404);
   });
@@ -110,7 +131,7 @@ describe("story api contracts", () => {
 
     const deleteResponse = await deleteStory(
       buildRequest(`http://localhost/api/stories/${createBody.story.storyId}`, { method: "DELETE", userId: "owner-1" }),
-      { params: { storyId: createBody.story.storyId } }
+      { params: Promise.resolve({ storyId: createBody.story.storyId }) }
     );
     expect(deleteResponse.status).toBe(200);
 
