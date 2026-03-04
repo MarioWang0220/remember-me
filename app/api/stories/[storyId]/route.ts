@@ -6,7 +6,7 @@ import { storyStore } from "../../../../lib/story-store";
 export const dynamic = "force-dynamic";
 
 interface StoryRouteContext {
-  params: Promise<{ storyId?: string }> | { storyId?: string };
+  params: Promise<{ storyId?: string }>;
 }
 
 function getStoryId(params: { storyId?: string }): string | null {
@@ -19,7 +19,7 @@ function getStoryId(params: { storyId?: string }): string | null {
 }
 
 async function resolveStoryId(context: StoryRouteContext): Promise<string | null> {
-  const params = await Promise.resolve(context.params);
+  const params = await context.params;
   return getStoryId(params);
 }
 

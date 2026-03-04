@@ -20,15 +20,18 @@ const TEST_AUTH_SECRET = "unit-test-auth-secret";
 const AUTH_SIGNATURE_TTL_MS = 5 * 60 * 1000;
 const AUTH_MAX_FUTURE_SKEW_MS = 30 * 1000;
 
-function buildSignature(userId: string, timestamp: string, secret: string): string {
-  return createHmac("sha256", secret).update(`${userId}.${timestamp}`).digest("hex");
+function buildSignature(method: string, path: string, userId: string, timestamp: string, secret: string): string {
+  const normalizedMethod = method.toUpperCase();
+  const payload = `${normalizedMethod}.${path}.${userId}.${timestamp}`;
+  return createHmac("sha256", secret).update(payload).digest("hex");
 }
 
 function buildRequest(url: string, options: RequestOptions): NextRequest {
   const headers = new Headers();
   if (options.userId) {
     const timestamp = (options.timestampMs ?? Date.now()).toString();
-    const signature = buildSignature(options.userId, timestamp, TEST_AUTH_SECRET);
+    const path = new URL(url).pathname;
+    const signature = buildSignature(options.method, path, options.userId, timestamp, TEST_AUTH_SECRET);
     let requestSignature = signature;
     if (options.tamperSignature) {
       requestSignature = `${signature}ff`;
@@ -74,6 +77,20 @@ describe("story api contracts", () => {
       buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1", malformedSignature: true })
     );
     expect(response.status).toBe(401);
+  });
+
+  it("rejects replaying auth headers on another path", async () => {
+    const originalRequest = buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1" });
+    const replayHeaders = new Headers(originalRequest.headers);
+
+    const replayResponse = await getTimeline(
+      new NextRequest("http://localhost/api/timeline", {
+        method: "GET",
+        headers: replayHeaders
+      })
+    );
+
+    expect(replayResponse.status).toBe(401);
   });
 
   it("rejects requests with expired auth timestamp", async () => {

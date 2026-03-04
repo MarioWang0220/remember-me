@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const SIGNATURE_TTL_MS = 5 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 30 * 1000;
 const HMAC_SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/i;
+const USER_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 function signPayload(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");
@@ -11,6 +12,12 @@ function signPayload(secret: string, payload: string): string {
 
 function isHexSignature(signature: string): boolean {
   return HMAC_SHA256_HEX_PATTERN.test(signature);
+}
+
+function buildSignaturePayload(request: NextRequest, userId: string, timestamp: string): string {
+  const method = request.method.toUpperCase();
+  const pathname = request.nextUrl.pathname;
+  return `${method}.${pathname}.${userId}.${timestamp}`;
 }
 
 function isSignatureValid(expectedHex: string, actualHex: string): boolean {
@@ -40,6 +47,9 @@ export function getRequestUserId(request: NextRequest): string | null {
   if (normalized.length === 0) {
     return null;
   }
+  if (!USER_ID_PATTERN.test(normalized)) {
+    return null;
+  }
 
   const normalizedTimestamp = timestampHeader.trim();
   if (!/^\d+$/.test(normalizedTimestamp)) {
@@ -65,7 +75,7 @@ export function getRequestUserId(request: NextRequest): string | null {
     return null;
   }
 
-  const payload = `${normalized}.${normalizedTimestamp}`;
+  const payload = buildSignaturePayload(request, normalized, normalizedTimestamp);
   const expectedSignature = signPayload(authSecret, payload);
   if (!isSignatureValid(expectedSignature, normalizedSignature.toLowerCase())) {
     return null;
