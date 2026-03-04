@@ -98,6 +98,12 @@ describe("story api contracts", () => {
     expect(response.status).toBe(401);
   });
 
+  it("rejects requests when auth shared secret is missing", async () => {
+    delete process.env.AUTH_SHARED_SECRET;
+    const response = await getStories(buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1" }));
+    expect(response.status).toBe(401);
+  });
+
   it("creates a story privately and hides it from other users", async () => {
     const createResponse = await createStory(
       buildRequest("http://localhost/api/stories", {
