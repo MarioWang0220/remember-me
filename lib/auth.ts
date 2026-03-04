@@ -2,19 +2,24 @@ import { NextRequest } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const SIGNATURE_TTL_MS = 5 * 60 * 1000;
+const MAX_FUTURE_SKEW_MS = 30 * 1000;
+const HMAC_SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/i;
 
 function signPayload(secret: string, payload: string): string {
   return createHmac("sha256", secret).update(payload).digest("hex");
 }
 
-function isSignatureValid(expectedHex: string, actualHex: string): boolean {
-  const expected = Buffer.from(expectedHex, "hex");
-  const actual = Buffer.from(actualHex, "hex");
+function isHexSignature(signature: string): boolean {
+  return HMAC_SHA256_HEX_PATTERN.test(signature);
+}
 
-  if (expected.length === 0 || actual.length === 0 || expected.length !== actual.length) {
+function isSignatureValid(expectedHex: string, actualHex: string): boolean {
+  if (expectedHex.length !== actualHex.length) {
     return false;
   }
 
+  const expected = Buffer.from(expectedHex, "hex");
+  const actual = Buffer.from(actualHex, "hex");
   return timingSafeEqual(expected, actual);
 }
 
@@ -36,19 +41,33 @@ export function getRequestUserId(request: NextRequest): string | null {
     return null;
   }
 
-  const timestamp = Number(timestampHeader);
-  if (!Number.isInteger(timestamp)) {
+  const normalizedTimestamp = timestampHeader.trim();
+  if (!/^\d+$/.test(normalizedTimestamp)) {
     return null;
   }
 
-  const ageMs = Math.abs(Date.now() - timestamp);
+  const timestamp = Number(normalizedTimestamp);
+  if (!Number.isSafeInteger(timestamp)) {
+    return null;
+  }
+
+  const normalizedSignature = signatureHeader.trim();
+  if (!isHexSignature(normalizedSignature)) {
+    return null;
+  }
+
+  const now = Date.now();
+  const ageMs = now - timestamp;
   if (ageMs > SIGNATURE_TTL_MS) {
     return null;
   }
+  if (timestamp - now > MAX_FUTURE_SKEW_MS) {
+    return null;
+  }
 
-  const payload = `${normalized}.${timestamp}`;
+  const payload = `${normalized}.${normalizedTimestamp}`;
   const expectedSignature = signPayload(authSecret, payload);
-  if (!isSignatureValid(expectedSignature, signatureHeader)) {
+  if (!isSignatureValid(expectedSignature, normalizedSignature.toLowerCase())) {
     return null;
   }
 

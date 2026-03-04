@@ -12,9 +12,13 @@ interface RequestOptions {
   userId?: string;
   body?: unknown;
   tamperSignature?: boolean;
+  malformedSignature?: boolean;
+  timestampMs?: number;
 }
 
 const TEST_AUTH_SECRET = "unit-test-auth-secret";
+const AUTH_SIGNATURE_TTL_MS = 5 * 60 * 1000;
+const AUTH_MAX_FUTURE_SKEW_MS = 30 * 1000;
 
 function buildSignature(userId: string, timestamp: string, secret: string): string {
   return createHmac("sha256", secret).update(`${userId}.${timestamp}`).digest("hex");
@@ -23,12 +27,18 @@ function buildSignature(userId: string, timestamp: string, secret: string): stri
 function buildRequest(url: string, options: RequestOptions): NextRequest {
   const headers = new Headers();
   if (options.userId) {
-    const timestamp = Date.now().toString();
+    const timestamp = (options.timestampMs ?? Date.now()).toString();
     const signature = buildSignature(options.userId, timestamp, TEST_AUTH_SECRET);
+    let requestSignature = signature;
+    if (options.tamperSignature) {
+      requestSignature = `${signature}ff`;
+    } else if (options.malformedSignature) {
+      requestSignature = `${signature}zz`;
+    }
 
     headers.set("x-user-id", options.userId);
     headers.set("x-auth-timestamp", timestamp);
-    headers.set("x-auth-signature", options.tamperSignature ? `${signature}ff` : signature);
+    headers.set("x-auth-signature", requestSignature);
   }
   if (typeof options.body !== "undefined") {
     headers.set("content-type", "application/json");
@@ -55,6 +65,35 @@ describe("story api contracts", () => {
   it("rejects requests with invalid auth signature", async () => {
     const response = await getStories(
       buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1", tamperSignature: true })
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects requests with malformed auth signature encoding", async () => {
+    const response = await getStories(
+      buildRequest("http://localhost/api/stories", { method: "GET", userId: "owner-1", malformedSignature: true })
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects requests with expired auth timestamp", async () => {
+    const response = await getStories(
+      buildRequest("http://localhost/api/stories", {
+        method: "GET",
+        userId: "owner-1",
+        timestampMs: Date.now() - AUTH_SIGNATURE_TTL_MS - 1_000
+      })
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects requests with auth timestamp too far in the future", async () => {
+    const response = await getStories(
+      buildRequest("http://localhost/api/stories", {
+        method: "GET",
+        userId: "owner-1",
+        timestampMs: Date.now() + AUTH_MAX_FUTURE_SKEW_MS + 1_000
+      })
     );
     expect(response.status).toBe(401);
   });
